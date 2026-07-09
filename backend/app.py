@@ -1,26 +1,4 @@
-"""
-Lingo Translator — Flask Backend
----------------------------------
-Exposes:
-  POST /api/translate          -> translate text (Google Translate via deep-translator)
-  GET  /api/history?user_id=x  -> fetch a user's saved translation history
-  POST /api/history            -> save a translation to a user's history
-  PATCH /api/history/<id>      -> toggle favorite on one history row
-  DELETE /api/history/<id>     -> delete one history row
-  GET  /api/health             -> health check
-
-Also serves the frontend (../frontend) as static files, so the whole app —
-UI + API — runs from a single server and a single URL. That's what makes it
-deployable as one link (see README "Deploy" section) instead of needing two
-separate hosted services.
-
-Why a backend at all?
-- Keeps translation logic off the browser
-- Lets every visitor have their own persisted history/favorites, server-side,
-  without needing a login system — each browser gets a random client_id
-  (generated once, stored in its own localStorage) that scopes its rows in
-  the database. Nobody sees anybody else's history.
-"""
+"""Flask backend for the Lingo translator app."""
 
 import os
 import sqlite3
@@ -31,13 +9,13 @@ from flask_cors import CORS
 from deep_translator import GoogleTranslator
 from langdetect import detect, DetectorFactory, LangDetectException
 
-DetectorFactory.seed = 0  # makes langdetect deterministic
+DetectorFactory.seed = 0
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 FRONTEND_DIR = os.path.join(BASE_DIR, "..", "frontend")
 
 app = Flask(__name__, static_folder=FRONTEND_DIR, static_url_path="")
-CORS(app)  # harmless to keep even same-origin; useful if you ever split hosts again
+CORS(app)
 
 
 @app.route("/")
@@ -45,10 +23,9 @@ def index():
     return app.send_static_file("index.html")
 
 
-MAX_TEXT_LENGTH = 2000  # mirrors the frontend's maxlength on the textarea
+MAX_TEXT_LENGTH = 2000
 DB_PATH = os.path.join(BASE_DIR, "lingo.db")
 
-# Maps our frontend language codes -> (deep_translator code, display name)
 LANG_MAP = {
     "en": ("en", "English"),
     "ur": ("ur", "Urdu"),
@@ -67,10 +44,6 @@ LANG_MAP = {
 }
 DETECT_NORMALIZE = {"zh-cn": "zh", "zh-tw": "zh"}
 
-
-# ---------------------------------------------------------------------------
-# Database
-# ---------------------------------------------------------------------------
 
 def get_db():
     if "db" not in g:
@@ -108,19 +81,9 @@ def init_db():
 init_db()
 
 
-# ---------------------------------------------------------------------------
-# Helpers
-# ---------------------------------------------------------------------------
-
 def is_valid_user_id(user_id):
-    # Frontend generates these with crypto.randomUUID(); keep validation loose
-    # but reject empty/garbage values so junk rows can't pile up under blank keys.
     return isinstance(user_id, str) and 8 <= len(user_id) <= 100
 
-
-# ---------------------------------------------------------------------------
-# Routes
-# ---------------------------------------------------------------------------
 
 @app.route("/api/health", methods=["GET"])
 def health():
@@ -232,7 +195,6 @@ def save_history():
     )
     db.commit()
 
-    # keep only the most recent 50 rows per user so the table doesn't grow forever
     db.execute(
         "DELETE FROM history WHERE user_id = ? AND id NOT IN "
         "(SELECT id FROM history WHERE user_id = ? ORDER BY created_at DESC LIMIT 50)",

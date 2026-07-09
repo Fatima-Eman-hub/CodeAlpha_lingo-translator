@@ -17,17 +17,13 @@ const LANGS = [
 ];
 
 let state = {
-  source: LANGS[0], // auto
-  target: LANGS[2], // urdu
+  source: LANGS[0],
+  target: LANGS[2],
   loading: false,
-  history: [], // {id, source, target, srcText, tgtText, favorited}
+  history: [],
   totalWords: 0,
 };
 
-// Every browser gets one random, permanent ID (kept in localStorage) so the
-// backend can scope each visitor's history to them and nobody else. This is
-// NOT a login system — it's device/browser-specific, like a cookie. Clearing
-// browser data resets it, and it doesn't follow you to a different browser.
 function getClientId(){
   let id = localStorage.getItem('lingo_client_id');
   if(!id){
@@ -38,9 +34,6 @@ function getClientId(){
 }
 const CLIENT_ID = getClientId();
 
-// Chinese/Japanese/Korean don't use spaces between words, so a naive
-// split(/\s+/) undercounts massively (a whole paragraph reads as "1 word").
-// For CJK text we count characters instead, which is the standard convention.
 function countWords(text){
   const trimmed = (text || '').trim();
   if(!trimmed) return 0;
@@ -117,7 +110,6 @@ setupSelector('source');
 setupSelector('target');
 updateLangUI();
 
-// Swap
 $('swapBtn').addEventListener('click', ()=>{
   if(state.source.code === 'auto'){
     const detectedName = lastResult && lastResult.detectedLanguage;
@@ -141,7 +133,6 @@ $('swapBtn').addEventListener('click', ()=>{
   }
 });
 
-// Char / word counters
 function updateCounters(){
   const val = $('inputText').value;
   const len = val.length;
@@ -153,7 +144,6 @@ function updateCounters(){
 }
 $('inputText').addEventListener('input', updateCounters);
 
-// Clear
 $('clearBtn').addEventListener('click', clearAll);
 function clearAll(){
   $('inputText').value = '';
@@ -161,7 +151,6 @@ function clearAll(){
   setOutputEmpty();
 }
 
-// Paste
 $('pasteBtn').addEventListener('click', async ()=>{
   try{
     const text = await navigator.clipboard.readText();
@@ -170,7 +159,6 @@ $('pasteBtn').addEventListener('click', async ()=>{
   }catch(e){ showToast('Clipboard access denied'); }
 });
 
-// Output helpers
 function setOutputEmpty(){
   const out = $('outputText');
   out.textContent = '';
@@ -189,7 +177,6 @@ function showSkeleton(){
   $('altChips').innerHTML = '';
 }
 
-// Toast
 function showToast(msg){
   const t = document.createElement('div');
   t.className = 'toast';
@@ -198,12 +185,8 @@ function showToast(msg){
   setTimeout(()=>t.remove(), 2000);
 }
 
-// Backend base URL. Empty string = same origin as the page itself.
-// Locally that's Flask on 127.0.0.1:5000 (which now also serves this page).
-// Deployed, it's whatever domain the app is hosted on — no code change needed.
 const BACKEND_URL = "";
 
-// Translate call via our Flask backend (backend/app.py), which uses Google Translate
 async function callBackend(text, sourceCode, targetCode){
   const response = await fetch(`${BACKEND_URL}/api/translate`, {
     method: "POST",

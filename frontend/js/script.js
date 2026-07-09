@@ -1,3 +1,4 @@
+
 const LANGS = [
   {code:'auto', name:'Detect language', native:'Auto-detect', flag:'🌐'},
   {code:'en', name:'English', native:'English', flag:'🇬🇧'},

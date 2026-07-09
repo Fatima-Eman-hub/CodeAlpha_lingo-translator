@@ -48,3 +48,4 @@ Open http://127.0.0.1:5000 in your browser.
 
 - History is stored per browser using a local client ID.
 - The app uses the free Google Translate service through a Python library.
+

@@ -1,5 +1,3 @@
-"""Flask backend for the Lingo translator app."""
-
 import os
 import sqlite3
 import time

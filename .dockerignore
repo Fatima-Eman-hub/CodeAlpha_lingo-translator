@@ -1,0 +1,7 @@
+.venv/
+.git/
+.gitignore
+backend/lingo.db
+backend/__pycache__/
+*.pyc
+README.md

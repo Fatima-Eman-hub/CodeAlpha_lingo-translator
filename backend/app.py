@@ -1,3 +1,4 @@
+"Backend file using Flask framework for a translation application. It includes routes for health check, translation, and managing translation history. The app uses SQLite for storing user translation history and supports multiple languages through the Google Translator API. It also handles CORS and serves a frontend from a specified directory."
 import os
 import sqlite3
 import time

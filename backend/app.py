@@ -1,4 +1,3 @@
-"Backend file using Flask framework for a translation application. It includes routes for health check, translation, and managing translation history. The app uses SQLite for storing user translation history and supports multiple languages through the Google Translator API. It also handles CORS and serves a frontend from a specified directory."
 import os
 import sqlite3
 import time
@@ -8,21 +7,20 @@ from flask_cors import CORS
 from deep_translator import GoogleTranslator
 from langdetect import detect, DetectorFactory, LangDetectException
 
-DetectorFactory.seed = 0
+DetectorFactory.seed = 0  
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 FRONTEND_DIR = os.path.join(BASE_DIR, "..", "frontend")
 
 app = Flask(__name__, static_folder=FRONTEND_DIR, static_url_path="")
-CORS(app)
-
+CORS(app)  
 
 @app.route("/")
 def index():
     return app.send_static_file("index.html")
 
 
-MAX_TEXT_LENGTH = 2000
+MAX_TEXT_LENGTH = 2000  
 DB_PATH = os.path.join(BASE_DIR, "lingo.db")
 
 LANG_MAP = {
@@ -43,6 +41,29 @@ LANG_MAP = {
 }
 DETECT_NORMALIZE = {"zh-cn": "zh", "zh-tw": "zh"}
 
+DETECT_LANGUAGE_NAMES = {
+    "en": "English", "ur": "Urdu", "es": "Spanish", "fr": "French", "de": "German",
+    "ar": "Arabic", "zh": "Chinese", "ja": "Japanese", "hi": "Hindi", "ru": "Russian",
+    "pt": "Portuguese", "tr": "Turkish", "ko": "Korean", "it": "Italian",
+    "fa": "Persian", "nl": "Dutch", "pl": "Polish", "sv": "Swedish", "fi": "Finnish",
+    "no": "Norwegian", "da": "Danish", "el": "Greek", "he": "Hebrew", "th": "Thai",
+    "vi": "Vietnamese", "id": "Indonesian", "ms": "Malay", "cs": "Czech", "sk": "Slovak",
+    "ro": "Romanian", "hu": "Hungarian", "bg": "Bulgarian", "uk": "Ukrainian",
+    "bn": "Bengali", "ta": "Tamil", "te": "Telugu", "mr": "Marathi", "gu": "Gujarati",
+    "pa": "Punjabi", "sw": "Swahili", "af": "Afrikaans", "sq": "Albanian", "am": "Amharic",
+    "hy": "Armenian", "az": "Azerbaijani", "eu": "Basque", "be": "Belarusian",
+    "ca": "Catalan", "hr": "Croatian", "et": "Estonian", "gl": "Galician",
+    "ka": "Georgian", "is": "Icelandic", "kn": "Kannada", "kk": "Kazakh",
+    "lv": "Latvian", "lt": "Lithuanian", "mk": "Macedonian", "mn": "Mongolian",
+    "ne": "Nepali", "sr": "Serbian", "sl": "Slovenian", "so": "Somali",
+    "tl": "Filipino", "cy": "Welsh", "km": "Khmer", "lo": "Lao", "my": "Burmese",
+    "si": "Sinhala",
+}
+
+
+# ---------------------------------------------------------------------------
+# Database
+# ---------------------------------------------------------------------------
 
 def get_db():
     if "db" not in g:
@@ -80,9 +101,19 @@ def init_db():
 init_db()
 
 
+# ---------------------------------------------------------------------------
+# Helpers
+# ---------------------------------------------------------------------------
+
 def is_valid_user_id(user_id):
+    # Frontend generates these with crypto.randomUUID(); keep validation loose
+    # but reject empty/garbage values so junk rows can't pile up under blank keys.
     return isinstance(user_id, str) and 8 <= len(user_id) <= 100
 
+
+# ---------------------------------------------------------------------------
+# Routes
+# ---------------------------------------------------------------------------
 
 @app.route("/api/health", methods=["GET"])
 def health():
@@ -117,8 +148,7 @@ def translate():
         try:
             raw_code = detect(text)
             norm_code = DETECT_NORMALIZE.get(raw_code, raw_code)
-            if norm_code in LANG_MAP:
-                detected_language_name = LANG_MAP[norm_code][1]
+            detected_language_name = DETECT_LANGUAGE_NAMES.get(norm_code, norm_code.upper())
             source_code = "auto"
         except LangDetectException:
             source_code = "auto"
@@ -194,6 +224,7 @@ def save_history():
     )
     db.commit()
 
+    # keep only the most recent 50 rows per user so the table doesn't grow forever
     db.execute(
         "DELETE FROM history WHERE user_id = ? AND id NOT IN "
         "(SELECT id FROM history WHERE user_id = ? ORDER BY created_at DESC LIMIT 50)",

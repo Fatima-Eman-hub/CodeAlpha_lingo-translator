@@ -1,4 +1,3 @@
-
 const LANGS = [
   {code:'auto', name:'Detect language', native:'Auto-detect', flag:'🌐'},
   {code:'en', name:'English', native:'English', flag:'🇬🇧'},
@@ -18,10 +17,10 @@ const LANGS = [
 ];
 
 let state = {
-  source: LANGS[0],
-  target: LANGS[2],
+  source: LANGS[0], 
+  target: LANGS[2], 
   loading: false,
-  history: [],
+  history: [], 
   totalWords: 0,
 };
 
@@ -114,11 +113,15 @@ updateLangUI();
 $('swapBtn').addEventListener('click', ()=>{
   if(state.source.code === 'auto'){
     const detectedName = lastResult && lastResult.detectedLanguage;
-    const match = detectedName ? LANGS.find(l => l.name.toLowerCase() === detectedName.toLowerCase()) : null;
-    if(match){
-      state.source = match; // resolve "auto" to the actual detected language, then swap normally
-    } else {
+    if(!detectedName){
       showToast("Can't swap yet — translate something first so I know the source language");
+      return;
+    }
+    const match = LANGS.find(l => l.name.toLowerCase() === detectedName.toLowerCase());
+    if(match){
+      state.source = match; 
+    } else {
+      showToast(`Detected "${detectedName}" isn't in the selectable language list, so it can't be swapped in`);
       return;
     }
   }
@@ -178,6 +181,7 @@ function showSkeleton(){
   $('altChips').innerHTML = '';
 }
 
+// Toast
 function showToast(msg){
   const t = document.createElement('div');
   t.className = 'toast';
@@ -185,7 +189,6 @@ function showToast(msg){
   $('toastContainer').appendChild(t);
   setTimeout(()=>t.remove(), 2000);
 }
-
 const BACKEND_URL = "";
 
 async function callBackend(text, sourceCode, targetCode){
@@ -198,7 +201,7 @@ async function callBackend(text, sourceCode, targetCode){
   if(!response.ok){
     throw new Error(data.error || "Translation request failed");
   }
-  return data; // { translation, detectedLanguage, phonetic, alternatives }
+  return data; 
 }
 
 let lastResult = null;
@@ -271,12 +274,6 @@ $('copyBtn').addEventListener('click', ()=>{
   const txt = $('outputText').innerText;
   navigator.clipboard.writeText(txt).then(()=> showToast('Copied to clipboard'));
 });
-
-// Text to speech
-// Two real bugs here on Windows/Edge: (1) plain 2-letter codes like 'ur' often
-// don't match an installed voice's locale (e.g. voices report 'ur-PK'), so the
-// browser silently does nothing; (2) voices load asynchronously — calling
-// speak() before they're ready can also fail silently. Both fixed below.
 const TTS_LOCALE = {
   en:'en-US', ur:'ur-PK', es:'es-ES', fr:'fr-FR', de:'de-DE', ar:'ar-SA',
   zh:'zh-CN', ja:'ja-JP', hi:'hi-IN', ru:'ru-RU', pt:'pt-PT', tr:'tr-TR',
@@ -301,8 +298,6 @@ function speakText(text, langCode){
   const utter = new SpeechSynthesisUtterance(text);
   utter.lang = locale;
 
-  // Prefer an exact/prefix voice match; otherwise let the browser fall back
-  // (most engines still speak using a default voice even without an exact match).
   const match = cachedVoices.find(v => v.lang === locale) ||
                 cachedVoices.find(v => v.lang && v.lang.startsWith(locale.split('-')[0]));
   if(match) utter.voice = match;
@@ -310,7 +305,6 @@ function speakText(text, langCode){
   utter.onerror = () => showToast(`No voice available for ${locale} on this device`);
 
   window.speechSynthesis.cancel();
-  // Re-check voices right before speaking in case they finished loading late
   if(cachedVoices.length === 0) loadVoices();
   window.speechSynthesis.speak(utter);
 }
@@ -324,12 +318,12 @@ $('micBtn').addEventListener('click', ()=>{
 
 // History
 function langByCode(code){
-  return LANGS.find(l => l.code === code) || LANGS[1]; // fallback to English display if unknown
+  return LANGS.find(l => l.code === code) || LANGS[1]; 
 }
 
 async function addHistoryEntry(srcText, tgtText){
   const entry = {
-    id: null, // filled in once the backend confirms the save
+    id: null, 
     source: state.source,
     target: state.target,
     srcText, tgtText,
@@ -356,8 +350,6 @@ async function addHistoryEntry(srcText, tgtText){
       const data = await res.json();
       entry.id = data.id;
     }
-    // if this silently fails, the entry just stays local for this session —
-    // translation itself already succeeded, so we don't interrupt the user with a toast
   }catch(e){
     console.error('Failed to save history to backend:', e);
   }
@@ -382,20 +374,40 @@ async function loadHistoryFromServer(){
     renderHistory();
   }catch(e){
     console.error('Failed to load history from backend:', e);
-    // backend not running yet — history panel just stays empty until a translation succeeds
+    
   }
 }
 
+let historyFilter = 'all'; 
+let historySearchTerm = '';
+
 function renderHistory(){
   const body = $('historyBody');
-  if(state.history.length === 0){
-    body.innerHTML = `<div class="history-empty"><span class="glyph">🗂️</span>No translations yet — your history will show up here.</div>`;
+
+  let list = state.history;
+  if(historyFilter === 'starred') list = list.filter(h => h.favorited);
+  if(historySearchTerm.trim()){
+    const term = historySearchTerm.trim().toLowerCase();
+    list = list.filter(h =>
+      h.srcText.toLowerCase().includes(term) || h.tgtText.toLowerCase().includes(term)
+    );
+  }
+
+  $('historyBadge').textContent = state.history.length;
+  const totalWordsAll = state.history.reduce((sum, h) => sum + countWords(h.srcText), 0);
+  $('drawerSubtitle').textContent = `${state.history.length} saved · ${totalWordsAll} words total`;
+
+  if(list.length === 0){
+    const msg = state.history.length === 0
+      ? 'No translations yet — your history will show up here.'
+      : (historyFilter === 'starred' ? 'No starred translations yet.' : 'No matches found.');
+    body.innerHTML = `<div class="history-empty"><span class="glyph">🗂️</span>${msg}</div>`;
     return;
   }
   body.innerHTML = '';
-  const list = document.createElement('div');
-  list.className = 'history-list';
-  state.history.forEach(h=>{
+  const listEl = document.createElement('div');
+  listEl.className = 'history-list';
+  list.forEach(h=>{
     const row = document.createElement('div');
     row.className = 'hist-item';
     row.innerHTML = `
@@ -415,9 +427,9 @@ function renderHistory(){
     };
     row.querySelector('.star').onclick = async (e)=>{
       e.stopPropagation();
-      h.favorited = !h.favorited; // optimistic UI update
+      h.favorited = !h.favorited; 
       renderHistory();
-      if(h.id == null) return; // wasn't saved to backend (e.g. it failed silently earlier)
+      if(h.id == null) return; 
       try{
         await fetch(`${BACKEND_URL}/api/history/${h.id}`, {
           method: 'PATCH',
@@ -428,9 +440,9 @@ function renderHistory(){
         console.error('Failed to sync favorite to backend:', e);
       }
     };
-    list.appendChild(row);
+    listEl.appendChild(row);
   });
-  body.appendChild(list);
+  body.appendChild(listEl);
 }
 
 function escapeHtml(s){
@@ -448,7 +460,6 @@ function updateStats(srcText){
 
 loadHistoryFromServer();
 
-// Keyboard shortcuts
 document.addEventListener('keydown', (e)=>{
   if((e.ctrlKey || e.metaKey) && e.key === 'Enter'){
     e.preventDefault();
@@ -461,3 +472,55 @@ document.addEventListener('keydown', (e)=>{
 });
 
 updateCounters();
+
+const FONT_MIN = 12, FONT_MAX = 24, FONT_STEP = 1;
+let fontSize = parseInt(localStorage.getItem('lingo_font_size') || '16', 10);
+function applyFontSize(){
+  fontSize = Math.max(FONT_MIN, Math.min(FONT_MAX, fontSize));
+  document.documentElement.style.setProperty('--content-font-size', fontSize + 'px');
+  $('fontSizeValue').textContent = fontSize;
+  localStorage.setItem('lingo_font_size', String(fontSize));
+}
+$('fontDecBtn').addEventListener('click', ()=>{ fontSize -= FONT_STEP; applyFontSize(); });
+$('fontIncBtn').addEventListener('click', ()=>{ fontSize += FONT_STEP; applyFontSize(); });
+applyFontSize();
+
+function applyContrastMode(on){
+  document.body.classList.toggle('dark-mode', on);
+  localStorage.setItem('lingo_dark_mode', on ? '1' : '0');
+}
+$('contrastBtn').addEventListener('click', ()=>{
+  applyContrastMode(!document.body.classList.contains('dark-mode'));
+});
+applyContrastMode(localStorage.getItem('lingo_dark_mode') === '1');
+
+function openDrawer(){
+  $('historyDrawer').classList.add('open');
+  $('drawerOverlay').classList.add('open');
+}
+function closeDrawer(){
+  $('historyDrawer').classList.remove('open');
+  $('drawerOverlay').classList.remove('open');
+}
+$('historyOpenBtn').addEventListener('click', openDrawer);
+$('historyCloseBtn').addEventListener('click', closeDrawer);
+$('drawerOverlay').addEventListener('click', closeDrawer);
+document.addEventListener('keydown', (e)=>{ if(e.key === 'Escape') closeDrawer(); });
+
+$('filterAllBtn').addEventListener('click', ()=>{
+  historyFilter = 'all';
+  $('filterAllBtn').classList.add('active');
+  $('filterStarredBtn').classList.remove('active');
+  renderHistory();
+});
+$('filterStarredBtn').addEventListener('click', ()=>{
+  historyFilter = 'starred';
+  $('filterStarredBtn').classList.add('active');
+  $('filterAllBtn').classList.remove('active');
+  renderHistory();
+});
+
+$('historySearch').addEventListener('input', (e)=>{
+  historySearchTerm = e.target.value;
+  renderHistory();
+});

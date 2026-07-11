@@ -25,6 +25,20 @@
     </div>
   </header>
 
+  <div class="toolbar">
+    <div class="toolbar-group" title="Text size">
+      <button class="tool-btn" id="fontDecBtn" aria-label="Decrease text size">A-</button>
+      <span class="tool-value" id="fontSizeValue">16</span>
+      <button class="tool-btn" id="fontIncBtn" aria-label="Increase text size">A+</button>
+    </div>
+    <button class="tool-pill" id="contrastBtn" title="Toggle high-contrast / dark mode">
+      <span class="tool-dot" id="contrastDot"></span> Contrast
+    </button>
+    <button class="tool-pill" id="historyOpenBtn" title="Translation history">
+      🕘 History <span class="tool-badge" id="historyBadge">0</span>
+    </button>
+  </div>
+
   <div class="lang-bar" id="langBar">
     <div class="lang-select auto" id="sourceSelect">
       <span class="flag" id="sourceFlag">🌐</span>
@@ -104,17 +118,31 @@
     </button>
   </div>
 
-  <div class="history">
-    <h3>🕘 Recent &amp; Favorite Translations</h3>
-    <div id="historyBody">
-      <div class="history-empty">
-        <span class="glyph">🗂️</span>
-        No translations yet — your history will show up here.
-      </div>
+  <footer>Press <span class="kbd" style="background:rgba(0,0,0,0.06); color:var(--ink-soft);">Ctrl</span>+<span class="kbd" style="background:rgba(0,0,0,0.06); color:var(--ink-soft);">Enter</span> to translate · <span class="kbd" style="background:rgba(0,0,0,0.06); color:var(--ink-soft);">Ctrl</span>+<span class="kbd" style="background:rgba(0,0,0,0.06); color:var(--ink-soft);">K</span> to clear</footer>
+</div>
+
+<div class="drawer-overlay" id="drawerOverlay"></div>
+<div class="history-drawer" id="historyDrawer">
+  <div class="drawer-head">
+    <div>
+      <h3>Translation History</h3>
+      <p id="drawerSubtitle">0 saved · 0 words total</p>
+    </div>
+    <button class="icon-btn" id="historyCloseBtn" aria-label="Close">✕</button>
+  </div>
+  <div class="drawer-filter">
+    <button class="filter-tab active" id="filterAllBtn" data-filter="all">All</button>
+    <button class="filter-tab" id="filterStarredBtn" data-filter="starred">★ Starred</button>
+  </div>
+  <div class="drawer-search">
+    <input type="text" id="historySearch" placeholder="Search translations...">
+  </div>
+  <div id="historyBody">
+    <div class="history-empty">
+      <span class="glyph">🗂️</span>
+      No translations yet — your history will show up here.
     </div>
   </div>
-
-  <footer>Press <span class="kbd" style="background:rgba(0,0,0,0.06); color:var(--ink-soft);">Ctrl</span>+<span class="kbd" style="background:rgba(0,0,0,0.06); color:var(--ink-soft);">Enter</span> to translate · <span class="kbd" style="background:rgba(0,0,0,0.06); color:var(--ink-soft);">Ctrl</span>+<span class="kbd" style="background:rgba(0,0,0,0.06); color:var(--ink-soft);">K</span> to clear</footer>
 </div>
 
 <div class="toast-container" id="toastContainer"></div>

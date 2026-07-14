@@ -1,31 +1,4 @@
-"""
-Lingo Translator — Flask Backend
----------------------------------
-Exposes:
-  POST /api/translate          -> translate text (Google Translate via deep-translator)
-  GET  /api/history?user_id=x  -> fetch a user's saved translation history
-  POST /api/history            -> save a translation to a user's history
-  PATCH /api/history/<id>      -> toggle favorite on one history row
-  DELETE /api/history/<id>     -> delete one history row
-  GET  /api/health             -> health check
-
-Also serves the frontend (../frontend) as static files when run locally
-(python app.py) or on a traditional host like Render/Back4app. On Vercel,
-the frontend is instead served as static files directly from /public by
-Vercel's own CDN — see api/index.py and vercel.json — so this Flask app
-only handles /api/* routes there. Either way, this file's logic is identical.
-
-Why a backend at all?
-- Keeps translation logic off the browser
-- Lets every visitor have their own persisted history/favorites, server-side,
-  without needing a login system — each browser gets a random client_id
-  (generated once, stored in its own localStorage) that scopes its rows in
-  the database. Nobody sees anybody else's history.
-
-Database: Postgres (designed against Neon's free tier — no credit card,
-no "sleep and manually wake" like some other free-tier hosts). Connection
-string comes from the DATABASE_URL environment variable.
-"""
+"""Flask backend for the Lingo translator app."""
 
 import os
 import time
@@ -37,13 +10,13 @@ from flask_cors import CORS
 from deep_translator import GoogleTranslator
 from langdetect import detect, DetectorFactory, LangDetectException
 
-DetectorFactory.seed = 0  # makes langdetect deterministic
+DetectorFactory.seed = 0
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 FRONTEND_DIR = os.path.join(BASE_DIR, "..", "frontend")
 
 app = Flask(__name__, static_folder=FRONTEND_DIR, static_url_path="")
-CORS(app)  # harmless to keep even same-origin; useful if you ever split hosts again
+CORS(app)
 
 
 @app.route("/")
@@ -54,8 +27,6 @@ def index():
 MAX_TEXT_LENGTH = 2000  # mirrors the frontend's maxlength on the textarea
 DATABASE_URL = os.environ.get("DATABASE_URL", "").strip()
 
-# Maps our frontend language codes -> (deep_translator code, display name)
-# This is the list of languages selectable in the dropdowns — intentionally short/curated.
 LANG_MAP = {
     "en": ("en", "English"),
     "ur": ("ur", "Urdu"),
@@ -74,10 +45,6 @@ LANG_MAP = {
 }
 DETECT_NORMALIZE = {"zh-cn": "zh", "zh-tw": "zh"}
 
-# Separate, much wider map used ONLY for labeling "Detected: ..." in the UI.
-# Google Translate can auto-detect far more languages than we let people pick
-# from our dropdown, so this stays decoupled from LANG_MAP — a detected
-# language showing up here doesn't mean it's swappable/selectable, just named.
 DETECT_LANGUAGE_NAMES = {
     "en": "English", "ur": "Urdu", "es": "Spanish", "fr": "French", "de": "German",
     "ar": "Arabic", "zh": "Chinese", "ja": "Japanese", "hi": "Hindi", "ru": "Russian",
@@ -97,10 +64,6 @@ DETECT_LANGUAGE_NAMES = {
     "si": "Sinhala",
 }
 
-
-# ---------------------------------------------------------------------------
-# Database (Postgres / Neon)
-# ---------------------------------------------------------------------------
 
 def get_db():
     if "db" not in g:
@@ -122,8 +85,6 @@ def close_db(exception=None):
 
 def init_db():
     if not DATABASE_URL:
-        # Allow the module to import (e.g. for tooling) without a live DB configured;
-        # routes that touch the DB will raise a clear error instead of crashing at import time.
         return
     conn = psycopg2.connect(DATABASE_URL)
     cur = conn.cursor()
@@ -148,28 +109,16 @@ def init_db():
 init_db()
 
 
-# ---------------------------------------------------------------------------
-# Helpers
-# ---------------------------------------------------------------------------
-
 def is_valid_user_id(user_id):
-    # Frontend generates these with crypto.randomUUID(); keep validation loose
-    # but reject empty/garbage values so junk rows can't pile up under blank keys.
     return isinstance(user_id, str) and 8 <= len(user_id) <= 100
 
 
 @app.errorhandler(Exception)
 def handle_any_error(e):
-    # Ensures the API always returns JSON, never Flask's default HTML error page —
-    # important since the frontend expects JSON from every /api/* response.
     app.logger.error(f"Unhandled error: {e}")
     message = str(e) if isinstance(e, RuntimeError) else "internal server error"
     return jsonify({"error": message}), 500
 
-
-# ---------------------------------------------------------------------------
-# Routes
-# ---------------------------------------------------------------------------
 
 @app.route("/api/health", methods=["GET"])
 def health():
@@ -285,7 +234,6 @@ def save_history():
     new_id = cur.fetchone()["id"]
     db.commit()
 
-    # keep only the most recent 50 rows per user so the table doesn't grow forever
     cur.execute(
         "DELETE FROM history WHERE user_id = %s AND id NOT IN "
         "(SELECT id FROM history WHERE user_id = %s ORDER BY created_at DESC LIMIT 50)",

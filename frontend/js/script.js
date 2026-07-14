@@ -17,17 +17,13 @@ const LANGS = [
 ];
 
 let state = {
-  source: LANGS[0], // auto
-  target: LANGS[2], // urdu
+  source: LANGS[0],
+  target: LANGS[2],
   loading: false,
-  history: [], // {id, source, target, srcText, tgtText, favorited}
+  history: [],
   totalWords: 0,
 };
 
-// Every browser gets one random, permanent ID (kept in localStorage) so the
-// backend can scope each visitor's history to them and nobody else. This is
-// NOT a login system — it's device/browser-specific, like a cookie. Clearing
-// browser data resets it, and it doesn't follow you to a different browser.
 function getClientId(){
   let id = localStorage.getItem('lingo_client_id');
   if(!id){
@@ -38,9 +34,6 @@ function getClientId(){
 }
 const CLIENT_ID = getClientId();
 
-// Chinese/Japanese/Korean don't use spaces between words, so a naive
-// split(/\s+/) undercounts massively (a whole paragraph reads as "1 word").
-// For CJK text we count characters instead, which is the standard convention.
 function countWords(text){
   const trimmed = (text || '').trim();
   if(!trimmed) return 0;
@@ -117,7 +110,6 @@ setupSelector('source');
 setupSelector('target');
 updateLangUI();
 
-// Swap
 $('swapBtn').addEventListener('click', ()=>{
   if(state.source.code === 'auto'){
     const detectedName = lastResult && lastResult.detectedLanguage;
@@ -145,7 +137,6 @@ $('swapBtn').addEventListener('click', ()=>{
   }
 });
 
-// Char / word counters
 function updateCounters(){
   const val = $('inputText').value;
   const len = val.length;
@@ -157,7 +148,6 @@ function updateCounters(){
 }
 $('inputText').addEventListener('input', updateCounters);
 
-// Clear
 $('clearBtn').addEventListener('click', clearAll);
 function clearAll(){
   $('inputText').value = '';
@@ -165,7 +155,6 @@ function clearAll(){
   setOutputEmpty();
 }
 
-// Paste
 $('pasteBtn').addEventListener('click', async ()=>{
   try{
     const text = await navigator.clipboard.readText();
@@ -174,7 +163,6 @@ $('pasteBtn').addEventListener('click', async ()=>{
   }catch(e){ showToast('Clipboard access denied'); }
 });
 
-// Output helpers
 function setOutputEmpty(){
   const out = $('outputText');
   out.textContent = '';
@@ -193,7 +181,6 @@ function showSkeleton(){
   $('altChips').innerHTML = '';
 }
 
-// Toast
 function showToast(msg){
   const t = document.createElement('div');
   t.className = 'toast';
@@ -202,12 +189,8 @@ function showToast(msg){
   setTimeout(()=>t.remove(), 2000);
 }
 
-// Backend base URL. Empty string = same origin as the page itself.
-// Locally that's Flask on 127.0.0.1:5000 (which now also serves this page).
-// Deployed, it's whatever domain the app is hosted on — no code change needed.
 const BACKEND_URL = "";
 
-// Translate call via our Flask backend (backend/app.py), which uses Google Translate
 async function callBackend(text, sourceCode, targetCode){
   const response = await fetch(`${BACKEND_URL}/api/translate`, {
     method: "POST",
@@ -286,17 +269,11 @@ function renderOutput(result){
 
 $('translateBtn').addEventListener('click', translate);
 
-// Copy
 $('copyBtn').addEventListener('click', ()=>{
   const txt = $('outputText').innerText;
   navigator.clipboard.writeText(txt).then(()=> showToast('Copied to clipboard'));
 });
 
-// Text to speech
-// Two real bugs here on Windows/Edge: (1) plain 2-letter codes like 'ur' often
-// don't match an installed voice's locale (e.g. voices report 'ur-PK'), so the
-// browser silently does nothing; (2) voices load asynchronously — calling
-// speak() before they're ready can also fail silently. Both fixed below.
 const TTS_LOCALE = {
   en:'en-US', ur:'ur-PK', es:'es-ES', fr:'fr-FR', de:'de-DE', ar:'ar-SA',
   zh:'zh-CN', ja:'ja-JP', hi:'hi-IN', ru:'ru-RU', pt:'pt-PT', tr:'tr-TR',
@@ -321,8 +298,6 @@ function speakText(text, langCode){
   const utter = new SpeechSynthesisUtterance(text);
   utter.lang = locale;
 
-  // Prefer an exact/prefix voice match; otherwise let the browser fall back
-  // (most engines still speak using a default voice even without an exact match).
   const match = cachedVoices.find(v => v.lang === locale) ||
                 cachedVoices.find(v => v.lang && v.lang.startsWith(locale.split('-')[0]));
   if(match) utter.voice = match;
@@ -330,7 +305,6 @@ function speakText(text, langCode){
   utter.onerror = () => showToast(`No voice available for ${locale} on this device`);
 
   window.speechSynthesis.cancel();
-  // Re-check voices right before speaking in case they finished loading late
   if(cachedVoices.length === 0) loadVoices();
   window.speechSynthesis.speak(utter);
 }
@@ -342,7 +316,6 @@ $('micBtn').addEventListener('click', ()=>{
   speakText($('inputText').value, state.source.code === 'auto' ? 'en' : state.source.code);
 });
 
-// History
 function langByCode(code){
   return LANGS.find(l => l.code === code) || LANGS[1]; // fallback to English display if unknown
 }
@@ -376,8 +349,6 @@ async function addHistoryEntry(srcText, tgtText){
       const data = await res.json();
       entry.id = data.id;
     }
-    // if this silently fails, the entry just stays local for this session —
-    // translation itself already succeeded, so we don't interrupt the user with a toast
   }catch(e){
     console.error('Failed to save history to backend:', e);
   }
@@ -402,7 +373,6 @@ async function loadHistoryFromServer(){
     renderHistory();
   }catch(e){
     console.error('Failed to load history from backend:', e);
-    // backend not running yet — history panel just stays empty until a translation succeeds
   }
 }
 
@@ -421,7 +391,6 @@ function renderHistory(){
     );
   }
 
-  // toolbar badge + drawer subtitle always reflect the full (unfiltered) history
   $('historyBadge').textContent = state.history.length;
   const totalWordsAll = state.history.reduce((sum, h) => sum + countWords(h.srcText), 0);
   $('drawerSubtitle').textContent = `${state.history.length} saved · ${totalWordsAll} words total`;
@@ -456,9 +425,9 @@ function renderHistory(){
     };
     row.querySelector('.star').onclick = async (e)=>{
       e.stopPropagation();
-      h.favorited = !h.favorited; // optimistic UI update
+      h.favorited = !h.favorited;
       renderHistory();
-      if(h.id == null) return; // wasn't saved to backend (e.g. it failed silently earlier)
+      if(h.id == null) return;
       try{
         await fetch(`${BACKEND_URL}/api/history/${h.id}`, {
           method: 'PATCH',
@@ -489,7 +458,6 @@ function updateStats(srcText){
 
 loadHistoryFromServer();
 
-// Keyboard shortcuts
 document.addEventListener('keydown', (e)=>{
   if((e.ctrlKey || e.metaKey) && e.key === 'Enter'){
     e.preventDefault();
@@ -503,7 +471,6 @@ document.addEventListener('keydown', (e)=>{
 
 updateCounters();
 
-// ---- Font size control (A- / A+) ----
 const FONT_MIN = 12, FONT_MAX = 24, FONT_STEP = 1;
 let fontSize = parseInt(localStorage.getItem('lingo_font_size') || '16', 10);
 function applyFontSize(){
@@ -516,7 +483,6 @@ $('fontDecBtn').addEventListener('click', ()=>{ fontSize -= FONT_STEP; applyFont
 $('fontIncBtn').addEventListener('click', ()=>{ fontSize += FONT_STEP; applyFontSize(); });
 applyFontSize();
 
-// ---- Contrast / dark mode toggle ----
 function applyContrastMode(on){
   document.body.classList.toggle('dark-mode', on);
   localStorage.setItem('lingo_dark_mode', on ? '1' : '0');
@@ -526,7 +492,6 @@ $('contrastBtn').addEventListener('click', ()=>{
 });
 applyContrastMode(localStorage.getItem('lingo_dark_mode') === '1');
 
-// ---- History drawer open/close ----
 function openDrawer(){
   $('historyDrawer').classList.add('open');
   $('drawerOverlay').classList.add('open');
@@ -540,7 +505,6 @@ $('historyCloseBtn').addEventListener('click', closeDrawer);
 $('drawerOverlay').addEventListener('click', closeDrawer);
 document.addEventListener('keydown', (e)=>{ if(e.key === 'Escape') closeDrawer(); });
 
-// ---- History filter tabs (All / Starred) ----
 $('filterAllBtn').addEventListener('click', ()=>{
   historyFilter = 'all';
   $('filterAllBtn').classList.add('active');
@@ -554,7 +518,6 @@ $('filterStarredBtn').addEventListener('click', ()=>{
   renderHistory();
 });
 
-// ---- History search ----
 $('historySearch').addEventListener('input', (e)=>{
   historySearchTerm = e.target.value;
   renderHistory();

@@ -1,28 +1,61 @@
+"""
+Lingo Translator — Flask Backend
+---------------------------------
+Exposes:
+  POST /api/translate          -> translate text (Google Translate via deep-translator)
+  GET  /api/history?user_id=x  -> fetch a user's saved translation history
+  POST /api/history            -> save a translation to a user's history
+  PATCH /api/history/<id>      -> toggle favorite on one history row
+  DELETE /api/history/<id>     -> delete one history row
+  GET  /api/health             -> health check
+
+Also serves the frontend (../frontend) as static files when run locally
+(python app.py) or on a traditional host like Render/Back4app. On Vercel,
+the frontend is instead served as static files directly from /public by
+Vercel's own CDN — see api/index.py and vercel.json — so this Flask app
+only handles /api/* routes there. Either way, this file's logic is identical.
+
+Why a backend at all?
+- Keeps translation logic off the browser
+- Lets every visitor have their own persisted history/favorites, server-side,
+  without needing a login system — each browser gets a random client_id
+  (generated once, stored in its own localStorage) that scopes its rows in
+  the database. Nobody sees anybody else's history.
+
+Database: Postgres (designed against Neon's free tier — no credit card,
+no "sleep and manually wake" like some other free-tier hosts). Connection
+string comes from the DATABASE_URL environment variable.
+"""
+
 import os
-import sqlite3
 import time
 
+import psycopg2
+import psycopg2.extras
 from flask import Flask, request, jsonify, g
 from flask_cors import CORS
 from deep_translator import GoogleTranslator
 from langdetect import detect, DetectorFactory, LangDetectException
 
-DetectorFactory.seed = 0  
+DetectorFactory.seed = 0  # makes langdetect deterministic
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 FRONTEND_DIR = os.path.join(BASE_DIR, "..", "frontend")
 
 app = Flask(__name__, static_folder=FRONTEND_DIR, static_url_path="")
-CORS(app)  
+CORS(app)  # harmless to keep even same-origin; useful if you ever split hosts again
+
 
 @app.route("/")
 def index():
     return app.send_static_file("index.html")
 
 
-MAX_TEXT_LENGTH = 2000  
-DB_PATH = os.path.join(BASE_DIR, "lingo.db")
+MAX_TEXT_LENGTH = 2000  # mirrors the frontend's maxlength on the textarea
+DATABASE_URL = os.environ.get("DATABASE_URL", "").strip()
 
+# Maps our frontend language codes -> (deep_translator code, display name)
+# This is the list of languages selectable in the dropdowns — intentionally short/curated.
 LANG_MAP = {
     "en": ("en", "English"),
     "ur": ("ur", "Urdu"),
@@ -41,6 +74,10 @@ LANG_MAP = {
 }
 DETECT_NORMALIZE = {"zh-cn": "zh", "zh-tw": "zh"}
 
+# Separate, much wider map used ONLY for labeling "Detected: ..." in the UI.
+# Google Translate can auto-detect far more languages than we let people pick
+# from our dropdown, so this stays decoupled from LANG_MAP — a detected
+# language showing up here doesn't mean it's swappable/selectable, just named.
 DETECT_LANGUAGE_NAMES = {
     "en": "English", "ur": "Urdu", "es": "Spanish", "fr": "French", "de": "German",
     "ar": "Arabic", "zh": "Chinese", "ja": "Japanese", "hi": "Hindi", "ru": "Russian",
@@ -62,13 +99,17 @@ DETECT_LANGUAGE_NAMES = {
 
 
 # ---------------------------------------------------------------------------
-# Database
+# Database (Postgres / Neon)
 # ---------------------------------------------------------------------------
 
 def get_db():
     if "db" not in g:
-        g.db = sqlite3.connect(DB_PATH)
-        g.db.row_factory = sqlite3.Row
+        if not DATABASE_URL:
+            raise RuntimeError(
+                "DATABASE_URL is not set. Create a free Postgres database at "
+                "https://neon.tech, then set DATABASE_URL to its connection string."
+            )
+        g.db = psycopg2.connect(DATABASE_URL, cursor_factory=psycopg2.extras.RealDictCursor)
     return g.db
 
 
@@ -80,21 +121,27 @@ def close_db(exception=None):
 
 
 def init_db():
-    conn = sqlite3.connect(DB_PATH)
-    conn.execute("""
+    if not DATABASE_URL:
+        # Allow the module to import (e.g. for tooling) without a live DB configured;
+        # routes that touch the DB will raise a clear error instead of crashing at import time.
+        return
+    conn = psycopg2.connect(DATABASE_URL)
+    cur = conn.cursor()
+    cur.execute("""
         CREATE TABLE IF NOT EXISTS history (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            id SERIAL PRIMARY KEY,
             user_id TEXT NOT NULL,
             source_code TEXT NOT NULL,
             target_code TEXT NOT NULL,
             src_text TEXT NOT NULL,
             tgt_text TEXT NOT NULL,
-            favorited INTEGER NOT NULL DEFAULT 0,
-            created_at REAL NOT NULL
+            favorited BOOLEAN NOT NULL DEFAULT FALSE,
+            created_at DOUBLE PRECISION NOT NULL
         )
     """)
-    conn.execute("CREATE INDEX IF NOT EXISTS idx_history_user ON history(user_id)")
+    cur.execute("CREATE INDEX IF NOT EXISTS idx_history_user ON history(user_id)")
     conn.commit()
+    cur.close()
     conn.close()
 
 
@@ -111,13 +158,22 @@ def is_valid_user_id(user_id):
     return isinstance(user_id, str) and 8 <= len(user_id) <= 100
 
 
+@app.errorhandler(Exception)
+def handle_any_error(e):
+    # Ensures the API always returns JSON, never Flask's default HTML error page —
+    # important since the frontend expects JSON from every /api/* response.
+    app.logger.error(f"Unhandled error: {e}")
+    message = str(e) if isinstance(e, RuntimeError) else "internal server error"
+    return jsonify({"error": message}), 500
+
+
 # ---------------------------------------------------------------------------
 # Routes
 # ---------------------------------------------------------------------------
 
 @app.route("/api/health", methods=["GET"])
 def health():
-    return jsonify({"status": "ok"})
+    return jsonify({"status": "ok", "database_configured": bool(DATABASE_URL)})
 
 
 @app.route("/api/translate", methods=["POST"])
@@ -191,11 +247,14 @@ def get_history():
         return jsonify({"error": "valid user_id query param is required"}), 400
 
     db = get_db()
-    rows = db.execute(
+    cur = db.cursor()
+    cur.execute(
         "SELECT id, source_code, target_code, src_text, tgt_text, favorited, created_at "
-        "FROM history WHERE user_id = ? ORDER BY created_at DESC LIMIT 50",
+        "FROM history WHERE user_id = %s ORDER BY created_at DESC LIMIT 50",
         (user_id,),
-    ).fetchall()
+    )
+    rows = cur.fetchall()
+    cur.close()
 
     return jsonify({"history": [dict(r) for r in rows]})
 
@@ -217,22 +276,25 @@ def save_history():
         return jsonify({"error": "source_code, target_code, src_text, tgt_text are all required"}), 400
 
     db = get_db()
-    cur = db.execute(
+    cur = db.cursor()
+    cur.execute(
         "INSERT INTO history (user_id, source_code, target_code, src_text, tgt_text, favorited, created_at) "
-        "VALUES (?, ?, ?, ?, ?, 0, ?)",
+        "VALUES (%s, %s, %s, %s, %s, FALSE, %s) RETURNING id",
         (user_id, source_code, target_code, src_text, tgt_text, time.time()),
     )
+    new_id = cur.fetchone()["id"]
     db.commit()
 
     # keep only the most recent 50 rows per user so the table doesn't grow forever
-    db.execute(
-        "DELETE FROM history WHERE user_id = ? AND id NOT IN "
-        "(SELECT id FROM history WHERE user_id = ? ORDER BY created_at DESC LIMIT 50)",
+    cur.execute(
+        "DELETE FROM history WHERE user_id = %s AND id NOT IN "
+        "(SELECT id FROM history WHERE user_id = %s ORDER BY created_at DESC LIMIT 50)",
         (user_id, user_id),
     )
     db.commit()
+    cur.close()
 
-    return jsonify({"id": cur.lastrowid}), 201
+    return jsonify({"id": new_id}), 201
 
 
 @app.route("/api/history/<int:row_id>", methods=["PATCH"])
@@ -243,15 +305,19 @@ def toggle_favorite(row_id):
         return jsonify({"error": "valid user_id is required"}), 400
 
     db = get_db()
-    row = db.execute(
-        "SELECT id, favorited FROM history WHERE id = ? AND user_id = ?", (row_id, user_id)
-    ).fetchone()
+    cur = db.cursor()
+    cur.execute(
+        "SELECT id, favorited FROM history WHERE id = %s AND user_id = %s", (row_id, user_id)
+    )
+    row = cur.fetchone()
     if row is None:
+        cur.close()
         return jsonify({"error": "not found"}), 404
 
-    new_val = 0 if row["favorited"] else 1
-    db.execute("UPDATE history SET favorited = ? WHERE id = ?", (new_val, row_id))
+    new_val = not row["favorited"]
+    cur.execute("UPDATE history SET favorited = %s WHERE id = %s", (new_val, row_id))
     db.commit()
+    cur.close()
     return jsonify({"id": row_id, "favorited": bool(new_val)})
 
 
@@ -262,8 +328,10 @@ def delete_history_row(row_id):
         return jsonify({"error": "valid user_id query param is required"}), 400
 
     db = get_db()
-    db.execute("DELETE FROM history WHERE id = ? AND user_id = ?", (row_id, user_id))
+    cur = db.cursor()
+    cur.execute("DELETE FROM history WHERE id = %s AND user_id = %s", (row_id, user_id))
     db.commit()
+    cur.close()
     return jsonify({"deleted": True})
 
 

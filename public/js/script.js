@@ -327,12 +327,23 @@ function speakText(text, langCode){
                 cachedVoices.find(v => v.lang && v.lang.startsWith(locale.split('-')[0]));
   if(match) utter.voice = match;
 
+  let started = false;
+  utter.onstart = () => { started = true; };
   utter.onerror = () => showToast(`No voice available for ${locale} on this device`);
 
   window.speechSynthesis.cancel();
   // Re-check voices right before speaking in case they finished loading late
   if(cachedVoices.length === 0) loadVoices();
   window.speechSynthesis.speak(utter);
+
+  // Some browsers (notably Chrome on Windows) neither fire 'error' nor make any
+  // sound when no voice matches the requested language — they just do nothing.
+  // If speech genuinely never started, tell the user instead of staying silent.
+  setTimeout(() => {
+    if(!started && !window.speechSynthesis.speaking){
+      showToast(match ? 'Playback failed — try again' : `No "${locale}" voice installed on this device, so it can't be spoken aloud`);
+    }
+  }, 400);
 }
 
 $('speakBtn').addEventListener('click', ()=>{

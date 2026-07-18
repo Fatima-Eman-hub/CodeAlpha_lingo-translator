@@ -13,7 +13,7 @@ lingo-translator/
 │   ├── requirements.txt
 │   ├── requirements-dev.txt → adds pytest, for running tests
 │   └── tests/
-│       └── test_app.py     → 23 automated tests (mocked, no live DB/internet needed)
+│       └── test_app.py     → 25 automated tests (mocked, no live DB/internet needed)
 ├── api/
 │   └── index.py            → thin entry point Vercel uses to run backend/app.py as a serverless function
 ├── vercel.json             → routes /api/* to api/index.py, everything else served from /public
@@ -124,7 +124,7 @@ What's intentionally *not* covered: real network calls to Google Translate, and 
   - **Value:** your Neon connection string
 - Click **Deploy**
 
-Vercel builds it and gives you a public URL like `https://lingo-translator-xxxx.vercel.app` — share that link with anyone.
+Vercel builds it and gives you a public URL like 'https://code-alpha-lingo-translator.vercel.app/' — share that link with anyone.
 
 **Why this works on Vercel when the old SQLite version didn't:** Vercel runs your backend as a *serverless function* — a fresh, temporary environment on every request, with no persistent local disk. SQLite is a file on disk, so it couldn't survive between requests there. Postgres (Neon) lives outside Vercel entirely, reached over the network, so it works the same way whether the request came from a serverless function, a traditional server, or your own laptop.
 
@@ -152,4 +152,6 @@ All three (Vercel, Render, Back4app) can even point at the **same** Neon databas
 - Text size control (A-/A+) and a contrast/dark-mode toggle
 - Server-persisted, per-user translation history with favorites, searchable in a slide-in drawer
 - Keyboard shortcuts: `Ctrl+Enter` translate, `Ctrl+K` clear
+- Response caching, automatic fallback translation provider, and per-IP rate limiting for resilience
+- 25 automated tests covering routing, validation, caching, fallback, and access control
 - Deployable as a single public URL on Vercel, Render, or Back4app — same codebase, no changes needed

@@ -1,4 +1,4 @@
-# Lingo — Language Translation Tool
+# Lingo Translator
 
 ## Project Structure
 ```
@@ -124,7 +124,7 @@ What's intentionally *not* covered: real network calls to Google Translate, and 
   - **Value:** your Neon connection string
 - Click **Deploy**
 
-Vercel builds it and gives you a public URL like 'https://code-alpha-lingo-translator.vercel.app/' — share that link with anyone.
+Vercel builds it and gives you a public URL like 'https://lingo-translator-umber.vercel.app/' — share that link with anyone.
 
 **Why this works on Vercel when the old SQLite version didn't:** Vercel runs your backend as a *serverless function* — a fresh, temporary environment on every request, with no persistent local disk. SQLite is a file on disk, so it couldn't survive between requests there. Postgres (Neon) lives outside Vercel entirely, reached over the network, so it works the same way whether the request came from a serverless function, a traditional server, or your own laptop.
 
